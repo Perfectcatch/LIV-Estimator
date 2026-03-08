@@ -1,0 +1,718 @@
+# 02 — DATABASE SCHEMA
+
+> Complete Prisma schema mapping all 28 Excel sheets into a relational PostgreSQL database.
+
+---
+
+## SCHEMA OVERVIEW
+
+```
+CATALOG TIER (Global — shared across all estimates)
+  Sku ──┤ 428 items
+  KitSku ──┤ Junction: which SKUs belong to which Kit
+  Kit ──┤ 30 kits
+  AssemblyKit ──┤ Junction: which Kits belong to which Assembly
+  Assembly ──┤ 13 assemblies
+  SuperAssemblyAssembly ──┤ Junction: which Assemblies belong to which SA
+  SuperAssembly ──┤ 3 super-assemblies
+  Vendor ──┤ 9 vendors
+  CostCode ──┤ 27 cost codes
+  Formula ──┤ 21 formulas
+
+ESTIMATE TIER (Per-project instances)
+  Estimate ──┤ The project
+  Selection ──┤ 8 categories per estimate
+  Takeoff ──┤ Dimension inputs + calc results
+  BomLine ──┤ Exploded BOM (T0 through T3)
+  ProposalLine ──┤ Customer-facing line items
+  PurchaseOrder ──┤ Vendor POs
+  PoLine ──┤ Items on each PO
+  BudgetLine ──┤ Estimated vs actual per cost code
+  ChangeOrder ──┤ Scope changes
+  ChangeOrderLine ──┤ Items on change orders
+  JobStage ──┤ Stage progress tracking
+  Payment ──┤ Payment milestones
+  ActivityLog ──┤ Changelog entries
+
+SETTINGS
+  AppSettings ──┤ Company info, markup defaults, tax, payment splits
+```
+
+---
+
+## PRISMA SCHEMA
+
+```prisma
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ════════════════════════════════════════════════════════════
+//  CATALOG TIER — Global reference data
+// ════════════════════════════════════════════════════════════
+
+model Sku {
+  id          String    @id @default(cuid())
+  code        String    @unique              // "SKU-MAT-001"
+  name        String                         // "Cap 1\""
+  costType    CostType                       // Materials, Labor, Equipment, Overhead
+  category    String                         // PLUMBING, EQUIPMENT, INTERIOR, etc.
+  detail      String?                        // Sub-category detail
+  vendorId    String
+  vendor      Vendor    @relation(fields: [vendorId], references: [id])
+  uom         String                         // EA, LF, SF, CY, LS, LOAD
+  unitCost    Decimal   @db.Decimal(10, 2)
+  markupPct   Decimal   @db.Decimal(5, 4)    // 0.60 = 60%
+  costCodeId  String
+  costCode    CostCode  @relation(fields: [costCodeId], references: [id])
+  stage       String                         // "Plumbing", "Equipment", etc.
+  fixedVar    FixedVar                       // Fixed or Variable
+  defaultQty  Decimal?  @db.Decimal(10, 2)   // Default quantity if fixed
+  formulaRef  String?                        // Named range reference for variable qty
+  notes       String?
+  altVendor1  String?
+  altCost1    Decimal?  @db.Decimal(10, 2)
+  altVendor2  String?
+  altCost2    Decimal?  @db.Decimal(10, 2)
+
+  // Relations
+  kitSkus     KitSku[]
+  bomLines    BomLine[]
+  poLines     PoLine[]
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([category])
+  @@index([vendorId])
+  @@index([costCodeId])
+}
+
+model Kit {
+  id              String    @id @default(cuid())
+  code            String    @unique           // "K-PERMITS"
+  name            String                      // "Permits & Inspections"
+  vendorLabel     String                      // "Government" (display vendor for kit)
+  notes           String?
+
+  // Relations
+  kitSkus         KitSku[]
+  assemblyKits    AssemblyKit[]
+  bomLines        BomLine[]
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model KitSku {
+  id          String    @id @default(cuid())
+  kitId       String
+  kit         Kit       @relation(fields: [kitId], references: [id], onDelete: Cascade)
+  skuId       String
+  sku         Sku       @relation(fields: [skuId], references: [id])
+  sortOrder   Int       @default(0)
+
+  @@unique([kitId, skuId])
+}
+
+model Assembly {
+  id              String    @id @default(cuid())
+  code            String    @unique           // "A-PRECONSTRUCTION"
+  name            String                      // "Pre-Construction & Permits"
+  description     String?
+
+  // Relations
+  assemblyKits            AssemblyKit[]
+  superAssemblyAssemblies SuperAssemblyAssembly[]
+  bomLines                BomLine[]
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model AssemblyKit {
+  id          String    @id @default(cuid())
+  assemblyId  String
+  assembly    Assembly  @relation(fields: [assemblyId], references: [id], onDelete: Cascade)
+  kitId       String
+  kit         Kit       @relation(fields: [kitId], references: [id])
+  sortOrder   Int       @default(0)
+
+  @@unique([assemblyId, kitId])
+}
+
+model SuperAssembly {
+  id              String    @id @default(cuid())
+  code            String    @unique           // "SA-BASE-POOL"
+  name            String                      // "Base Pool & Spa"
+  costCodeId      String?
+  costCode        CostCode? @relation(fields: [costCodeId], references: [id])
+  description     String?
+
+  // Relations
+  superAssemblyAssemblies SuperAssemblyAssembly[]
+  bomLines                BomLine[]
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model SuperAssemblyAssembly {
+  id              String         @id @default(cuid())
+  superAssemblyId String
+  superAssembly   SuperAssembly  @relation(fields: [superAssemblyId], references: [id], onDelete: Cascade)
+  assemblyId      String
+  assembly        Assembly       @relation(fields: [assemblyId], references: [id])
+  sortOrder       Int            @default(0)
+
+  @@unique([superAssemblyId, assemblyId])
+}
+
+
+// ════════════════════════════════════════════════════════════
+//  REFERENCE DATA — Vendors, Cost Codes, Formulas
+// ════════════════════════════════════════════════════════════
+
+model Vendor {
+  id          String    @id @default(cuid())
+  name        String    @unique               // "Horner Express"
+  category    VendorCategory                   // SUPPLIER or SUBCONTRACTOR
+  terms       String?                          // "Net 30"
+  leadDays    Int?                             // 5
+  phone       String?
+  email       String?
+  notes       String?
+
+  skus        Sku[]
+  purchaseOrders PurchaseOrder[]
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model CostCode {
+  id          String    @id @default(cuid())
+  code        String    @unique               // "01-PREP"
+  stageName   String                          // "Permitting & Inspections"
+  costType    String                          // "Expense", "Subcontractor", "Materials"
+  stageNum    Int                             // 1
+  jtCode      Int                             // 1200 (JobTread code)
+  jtId        String?                         // "22Ns3escGeqG" (JobTread ID)
+  description String?
+
+  skus            Sku[]
+  superAssemblies SuperAssembly[]
+  budgetLines     BudgetLine[]
+  jobStages       JobStage[]
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([stageNum])
+}
+
+model Formula {
+  id          String    @id @default(cuid())
+  namedRange  String    @unique               // "CALC_PoolGallons"
+  description String                          // "Pool volume in gallons"
+  expression  String                          // "length * width * avgDepth * 7.48"
+  unit        String                          // "gal"
+  notes       String?
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+
+// ════════════════════════════════════════════════════════════
+//  ESTIMATE TIER — Per-project data
+// ════════════════════════════════════════════════════════════
+
+model Estimate {
+  id              String    @id @default(cuid())
+  proposalNumber  String    @unique           // "Q25050001"
+  status          EstimateStatus @default(DRAFT)
+  date            DateTime  @default(now())
+
+  // ── Customer Information (from 10-PROJECT-INFO) ──
+  customerName    String
+  address         String
+  cityCounty      String
+  state           String    @default("FL")
+  zip             String
+  phoneCel        String?
+  phoneHome       String?
+  email           String?
+  projectName     String?                     // "Residence or Job Name"
+
+  // ── Site Conditions (checkboxes from 10-PROJECT-INFO) ──
+  siltFence       Boolean   @default(true)
+  dewatering      Boolean   @default(false)
+  yardScrape      Boolean   @default(true)
+  capIrrigation   Boolean   @default(false)
+
+  // ── Pricing Settings ──
+  division        Division  @default(RETAIL)   // retail / residential / commercial
+  poolCount       Int       @default(1)
+  globalMarkup    Decimal   @db.Decimal(5, 4) @default(1.50)
+  targetMargin    Decimal   @db.Decimal(5, 4) @default(0.35)
+  minMargin       Decimal   @db.Decimal(5, 4) @default(0.25)
+  roundUp         Boolean   @default(true)
+  roundGranularity Decimal  @db.Decimal(10, 2) @default(50)
+  taxRate         Decimal   @db.Decimal(5, 4)  @default(0.0875)
+
+  // ── Payment Split % (from 09-SETTINGS) ──
+  depositPct      Decimal   @db.Decimal(5, 4) @default(0.10)
+  shellPct        Decimal   @db.Decimal(5, 4) @default(0.45)
+  equipmentPct    Decimal   @db.Decimal(5, 4) @default(0.20)
+  finalPct        Decimal   @db.Decimal(5, 4) @default(0.25)
+
+  // ── Pool Design (from 10-PROJECT-INFO sections) ──
+  // Base Pool & Excavation
+  basePoolSqft    Decimal?  @db.Decimal(10, 2)  @default(400)
+  raisedAboveLf   Decimal?  @db.Decimal(10, 2)  @default(0)
+  depthOver5ft    Decimal?  @db.Decimal(10, 2)  @default(0)
+  removeSlabSqft  Decimal?  @db.Decimal(10, 2)  @default(0)
+  
+  // Access Items
+  sunshelfSqft    Decimal?  @db.Decimal(10, 2)  @default(0)
+  swimoutLf       Decimal?  @db.Decimal(10, 2)  @default(0)
+  extraStepsSqft  Decimal?  @db.Decimal(10, 2)  @default(0)
+  halfRoundSteps  Int?      @default(0)
+  handrail48      Int?      @default(0)
+  stepLadder24    Int?      @default(0)
+
+  // Trim & Finish
+  copingLf        Decimal?  @db.Decimal(10, 2)  @default(0)
+  poolFinishSqft  Decimal?  @db.Decimal(10, 2)  @default(0)
+  waterlineTileLf Decimal?  @db.Decimal(10, 2)  @default(0)
+  raisedTileBondLf Decimal? @db.Decimal(10, 2)  @default(0)
+  tileBacksideLf  Decimal?  @db.Decimal(10, 2)  @default(0)
+  stuccoRiserFace Int?      @default(0)
+
+  // Spa Design
+  baseSpa         Boolean   @default(false)
+  baseSpaSquft    Decimal?  @db.Decimal(10, 2)  @default(100)
+  spaOverBase     Decimal?  @db.Decimal(10, 2)  @default(0)
+  raisedPer6in    Int?      @default(18)
+  therapyJets     Int?      @default(1)
+  spillways       Int?      @default(0)
+  spaHandrail48   Int?      @default(0)
+
+  // Deck Areas
+  mainDeckSqft    Decimal?  @db.Decimal(10, 2)  @default(0)
+  secondDeckSqft  Decimal?  @db.Decimal(10, 2)  @default(0)
+  customDeck1Sqft Decimal?  @db.Decimal(10, 2)  @default(0)
+  customDeck2Sqft Decimal?  @db.Decimal(10, 2)  @default(0)
+
+  // Screen Enclosure
+  screenType      String?
+  screenColor     String?
+  screenRoof      String?
+  wallPerimeter   Decimal?  @db.Decimal(10, 2)  @default(0)
+  wallHeight      Decimal?  @db.Decimal(10, 2)  @default(0)
+  screenDoors     Int?      @default(0)
+
+  // Estimator
+  estimatorName   String?   @default("John Doe")
+  bidEndDays      Int       @default(30)
+
+  // ── Relations ──
+  takeoff         Takeoff?
+  selections      Selection[]
+  bomLines        BomLine[]
+  proposalLines   ProposalLine[]
+  purchaseOrders  PurchaseOrder[]
+  budgetLines     BudgetLine[]
+  changeOrders    ChangeOrder[]
+  jobStages       JobStage[]
+  payments        Payment[]
+  activityLog     ActivityLog[]
+  addons          EstimateAddon[]
+  upgrades        EstimateUpgrade[]
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model Takeoff {
+  id              String    @id @default(cuid())
+  estimateId      String    @unique
+  estimate        Estimate  @relation(fields: [estimateId], references: [id], onDelete: Cascade)
+
+  // ── Input Dimensions (from 12-TAKEOFF) ──
+  poolLength      Decimal   @db.Decimal(10, 2) @default(32)
+  poolWidth       Decimal   @db.Decimal(10, 2) @default(16)
+  shallowDepth    Decimal   @db.Decimal(10, 2) @default(3.5)
+  deepDepth       Decimal   @db.Decimal(10, 2) @default(5.5)
+  spaLength       Decimal   @db.Decimal(10, 2) @default(8)
+  spaWidth        Decimal   @db.Decimal(10, 2) @default(6)
+  spaDepth        Decimal   @db.Decimal(10, 2) @default(3.5)
+
+  // ── Shape / Style ──
+  poolShape       String    @default("Freeform")
+
+  // ── Calculated Values (from 08-FORMULA-LIBRARY) ──
+  // These are recomputed on every save via lib/formulas.ts
+  avgDepth        Decimal?  @db.Decimal(10, 2)
+  poolSqft        Decimal?  @db.Decimal(10, 2)
+  poolPerimeter   Decimal?  @db.Decimal(10, 2)
+  poolGallons     Decimal?  @db.Decimal(10, 2)
+  guniteCY        Decimal?  @db.Decimal(10, 2)
+  excavCY         Decimal?  @db.Decimal(10, 2)
+  haulLoads       Decimal?  @db.Decimal(10, 2)
+  rebarSticks     Decimal?  @db.Decimal(10, 2)
+  rebarLF         Decimal?  @db.Decimal(10, 2)
+  plumbingLF      Decimal?  @db.Decimal(10, 2)
+  interiorSF      Decimal?  @db.Decimal(10, 2)
+  tileSF          Decimal?  @db.Decimal(10, 2)
+  copingLF        Decimal?  @db.Decimal(10, 2)
+  fenceLF         Decimal?  @db.Decimal(10, 2)
+  spaCY           Decimal?  @db.Decimal(10, 2)
+  pmFee           Decimal?  @db.Decimal(10, 2)
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model Selection {
+  id              String    @id @default(cuid())
+  estimateId      String
+  estimate        Estimate  @relation(fields: [estimateId], references: [id], onDelete: Cascade)
+  category        SelectionCategory             // INTERIOR_FINISH, COPING, EQUIPMENT, etc.
+  optionIndex     Int       @default(0)          // 0-3 index into option list
+  optionName      String                         // "Standard Plaster"
+  costDelta       Decimal   @db.Decimal(10, 2)   // Price adder/reducer from base
+
+  @@unique([estimateId, category])
+}
+
+model BomLine {
+  id              String    @id @default(cuid())
+  estimateId      String
+  estimate        Estimate  @relation(fields: [estimateId], references: [id], onDelete: Cascade)
+  tier            BomTier                        // T0, T1, T2, T3
+  sortOrder       Int       @default(0)
+
+  // ── Reference to catalog item (based on tier) ──
+  skuId           String?
+  sku             Sku?          @relation(fields: [skuId], references: [id])
+  kitId           String?
+  kit             Kit?          @relation(fields: [kitId], references: [id])
+  assemblyId      String?
+  assembly        Assembly?     @relation(fields: [assemblyId], references: [id])
+  superAssemblyId String?
+  superAssembly   SuperAssembly? @relation(fields: [superAssemblyId], references: [id])
+
+  // ── T0 line-level data (only populated for SKU-level lines) ──
+  quantity        Decimal?  @db.Decimal(10, 2)
+  unitCost        Decimal?  @db.Decimal(10, 2)
+  extCost         Decimal?  @db.Decimal(10, 2)
+  markupPct       Decimal?  @db.Decimal(5, 4)
+  sellPrice       Decimal?  @db.Decimal(10, 2)
+
+  // ── Parent hierarchy tracking ──
+  parentKitId         String?
+  parentAssemblyId    String?
+  parentSuperAssemblyId String?
+
+  @@index([estimateId])
+  @@index([tier])
+}
+
+model EstimateAddon {
+  id              String    @id @default(cuid())
+  estimateId      String
+  estimate        Estimate  @relation(fields: [estimateId], references: [id], onDelete: Cascade)
+  slotNumber      Int                           // 1-10
+  description     String?
+  amount          Decimal   @db.Decimal(10, 2) @default(0)
+}
+
+model EstimateUpgrade {
+  id              String    @id @default(cuid())
+  estimateId      String
+  estimate        Estimate  @relation(fields: [estimateId], references: [id], onDelete: Cascade)
+  category        String                        // "Pool Pump", "Filter", etc.
+  isOptional      Boolean   @default(false)      // Right column = optional
+  description     String?
+  amount          Decimal   @db.Decimal(10, 2) @default(0)
+}
+
+
+// ════════════════════════════════════════════════════════════
+//  OUTPUT DOCUMENTS
+// ════════════════════════════════════════════════════════════
+
+model ProposalLine {
+  id              String    @id @default(cuid())
+  estimateId      String
+  estimate        Estimate  @relation(fields: [estimateId], references: [id], onDelete: Cascade)
+  lineNum         Int
+  description     String
+  detail          String?
+  included        Boolean   @default(true)
+  amount          Decimal?  @db.Decimal(10, 2)
+  sortOrder       Int       @default(0)
+}
+
+model PurchaseOrder {
+  id              String    @id @default(cuid())
+  estimateId      String
+  estimate        Estimate  @relation(fields: [estimateId], references: [id], onDelete: Cascade)
+  poNumber        String    @unique              // "PO-0001"
+  vendorId        String
+  vendor          Vendor    @relation(fields: [vendorId], references: [id])
+  date            DateTime  @default(now())
+  terms           String?
+  status          PoStatus  @default(DRAFT)
+  subtotal        Decimal   @db.Decimal(10, 2) @default(0)
+  notes           String?
+
+  lines           PoLine[]
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model PoLine {
+  id              String    @id @default(cuid())
+  purchaseOrderId String
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  skuId           String
+  sku             Sku       @relation(fields: [skuId], references: [id])
+  description     String
+  quantity        Decimal   @db.Decimal(10, 2)
+  uom             String
+  unitCost        Decimal   @db.Decimal(10, 2)
+  total           Decimal   @db.Decimal(10, 2)
+  sortOrder       Int       @default(0)
+}
+
+model BudgetLine {
+  id              String    @id @default(cuid())
+  estimateId      String
+  estimate        Estimate  @relation(fields: [estimateId], references: [id], onDelete: Cascade)
+  costCodeId      String
+  costCode        CostCode  @relation(fields: [costCodeId], references: [id])
+  estimated       Decimal   @db.Decimal(10, 2) @default(0)
+  committed       Decimal   @db.Decimal(10, 2) @default(0)
+  actual          Decimal   @db.Decimal(10, 2) @default(0)
+  notes           String?
+
+  @@unique([estimateId, costCodeId])
+}
+
+model ChangeOrder {
+  id              String    @id @default(cuid())
+  estimateId      String
+  estimate        Estimate  @relation(fields: [estimateId], references: [id], onDelete: Cascade)
+  coNumber        Int                            // Sequential per estimate
+  date            DateTime  @default(now())
+  reason          String?
+  totalDelta      Decimal   @db.Decimal(10, 2) @default(0)
+  status          ChangeOrderStatus @default(DRAFT)
+  lines           ChangeOrderLine[]
+}
+
+model ChangeOrderLine {
+  id              String    @id @default(cuid())
+  changeOrderId   String
+  changeOrder     ChangeOrder @relation(fields: [changeOrderId], references: [id], onDelete: Cascade)
+  description     String
+  addRemove       AddRemove
+  amount          Decimal   @db.Decimal(10, 2)
+}
+
+model JobStage {
+  id              String    @id @default(cuid())
+  estimateId      String
+  estimate        Estimate  @relation(fields: [estimateId], references: [id], onDelete: Cascade)
+  costCodeId      String
+  costCode        CostCode  @relation(fields: [costCodeId], references: [id])
+  status          StageStatus @default(NOT_STARTED)
+  startDate       DateTime?
+  endDate         DateTime?
+  durationDays    Int?
+  notes           String?
+
+  @@unique([estimateId, costCodeId])
+}
+
+model Payment {
+  id              String    @id @default(cuid())
+  estimateId      String
+  estimate        Estimate  @relation(fields: [estimateId], references: [id], onDelete: Cascade)
+  milestoneNum    Int                            // 1-4
+  milestoneName   String                         // "Deposit — Contract Signing"
+  percentage      Decimal   @db.Decimal(5, 4)
+  amountDue       Decimal   @db.Decimal(10, 2)
+  datePaid        DateTime?
+  amountPaid      Decimal   @db.Decimal(10, 2) @default(0)
+
+  @@unique([estimateId, milestoneNum])
+}
+
+model ActivityLog {
+  id              String    @id @default(cuid())
+  estimateId      String
+  estimate        Estimate  @relation(fields: [estimateId], references: [id], onDelete: Cascade)
+  timestamp       DateTime  @default(now())
+  user            String    @default("System")
+  action          String                         // "Created", "Updated Selections", etc.
+  details         String?
+}
+
+
+// ════════════════════════════════════════════════════════════
+//  SETTINGS
+// ════════════════════════════════════════════════════════════
+
+model AppSettings {
+  id              String    @id @default("singleton")
+  companyName     String    @default("LIV Pools LLC")
+  cityStateZip    String    @default("Clearwater, FL 34619")
+  license         String    @default("CPC1459998")
+  phone           String    @default("(727) 555-0100")
+  email           String    @default("info@livpools.com")
+  defaultMarkup   Decimal   @db.Decimal(5, 4)  @default(1.50)
+  taxRate         Decimal   @db.Decimal(5, 4)  @default(0.0875)
+  depositPct      Decimal   @db.Decimal(5, 4)  @default(0.10)
+  shellPct        Decimal   @db.Decimal(5, 4)  @default(0.45)
+  equipmentPct    Decimal   @db.Decimal(5, 4)  @default(0.20)
+  finalPct        Decimal   @db.Decimal(5, 4)  @default(0.25)
+  targetMargin    Decimal   @db.Decimal(5, 4)  @default(0.35)
+  minMargin       Decimal   @db.Decimal(5, 4)  @default(0.25)
+  roundUp         Boolean   @default(true)
+  roundGranularity Decimal  @db.Decimal(10, 2) @default(50)
+  updatedAt       DateTime  @updatedAt
+}
+
+
+// ════════════════════════════════════════════════════════════
+//  ENUMS
+// ════════════════════════════════════════════════════════════
+
+enum CostType {
+  MATERIALS
+  LABOR
+  EQUIPMENT
+  OVERHEAD
+  SUBCONTRACTOR
+  EXPENSE
+  OTHER
+}
+
+enum FixedVar {
+  FIXED
+  VARIABLE
+}
+
+enum VendorCategory {
+  SUPPLIER
+  SUBCONTRACTOR
+}
+
+enum Division {
+  RETAIL
+  RESIDENTIAL
+  COMMERCIAL
+}
+
+enum BomTier {
+  T0  // SKU
+  T1  // Kit
+  T2  // Assembly
+  T3  // Super-Assembly
+}
+
+enum SelectionCategory {
+  INTERIOR_FINISH
+  COPING
+  EQUIPMENT
+  SANITIZATION
+  AUTOMATION
+  HEATING
+  LIGHTING
+  SPA
+}
+
+enum EstimateStatus {
+  DRAFT
+  PROPOSED
+  APPROVED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum PoStatus {
+  DRAFT
+  SENT
+  ACKNOWLEDGED
+  RECEIVED
+  PARTIAL
+  COMPLETE
+}
+
+enum ChangeOrderStatus {
+  DRAFT
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum AddRemove {
+  ADD
+  REMOVE
+}
+
+enum StageStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETE
+  ON_HOLD
+}
+```
+
+---
+
+## KEY RELATIONSHIPS DIAGRAM
+
+```
+SuperAssembly (3)
+  ├──▶ SuperAssemblyAssembly ──▶ Assembly (13)
+  │                                ├──▶ AssemblyKit ──▶ Kit (30)
+  │                                │                     ├──▶ KitSku ──▶ Sku (428)
+  │                                │                     │                ├──▶ Vendor
+  │                                │                     │                └──▶ CostCode
+  │                                │                     └────────────────────────────
+  │                                └─────────────────────────────────────────────────
+  └──────────────────────────────────────────────────────────────────────────────────
+
+Estimate
+  ├──▶ Takeoff (1:1)
+  ├──▶ Selection[] (1:8 — one per category)
+  ├──▶ BomLine[] (1:many — exploded hierarchy)
+  ├──▶ ProposalLine[] (1:many)
+  ├──▶ PurchaseOrder[] → PoLine[] → Sku
+  ├──▶ BudgetLine[] → CostCode
+  ├──▶ ChangeOrder[] → ChangeOrderLine[]
+  ├──▶ JobStage[] → CostCode
+  ├──▶ Payment[] (1:4 milestones)
+  ├──▶ EstimateAddon[] (1:10 slots)
+  ├──▶ EstimateUpgrade[] (1:many)
+  └──▶ ActivityLog[]
+```
+
+---
+
+*Next: See `03-CATALOG-SYSTEM.md` for catalog management logic.*
