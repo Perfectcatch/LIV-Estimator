@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, use } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, Layers, Save, Plus, Trash2, Grid3x3 } from "lucide-react";
 import Link from "next/link";
@@ -45,8 +45,8 @@ const DEFAULT_ASM = {
 
 export default function AssemblyDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
-  const resolvedParams = typeof params === "object" && "then" in params ? { id: "a1" } : params as { id: string };
-  const asm = MOCK_ASSEMBLY_DATA[resolvedParams.id] ?? DEFAULT_ASM;
+  const { id } = use(params);
+  const asm = MOCK_ASSEMBLY_DATA[id] ?? DEFAULT_ASM;
 
   const [form, setForm] = useState({
     code: asm.code,

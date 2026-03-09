@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, use } from "react";
 import { useRouter } from "next/navigation";
 import {
   ChevronLeft, Database, Save, Plus, Trash2, Layers,
@@ -82,8 +82,8 @@ function stageBadgeColor(stage: string) {
 
 export default function SuperAssemblyDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
-  const resolvedParams = typeof params === "object" && "then" in params ? { id: "sa1" } : params as { id: string };
-  const sa = MOCK_SA_DATA[resolvedParams.id] ?? DEFAULT_SA;
+  const { id } = use(params);
+  const sa = MOCK_SA_DATA[id] ?? DEFAULT_SA;
 
   const [form, setForm] = useState({
     code: sa.code,

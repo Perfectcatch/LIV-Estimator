@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, use } from "react";
 import { ChevronLeft, Grid3x3, Save, Plus, Trash2, GripVertical } from "lucide-react";
 import Link from "next/link";
 import { formatCurrency, cn } from "@/lib/utils";
@@ -43,8 +43,8 @@ function sellPrice(cost: number, markup: number) {
 }
 
 export default function KitDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const resolvedParams = typeof params === "object" && "then" in params ? { id: "k1" } : params as { id: string };
-  const kit = MOCK_KIT_DATA[resolvedParams.id] ?? DEFAULT_KIT;
+  const { id } = use(params);
+  const kit = MOCK_KIT_DATA[id] ?? DEFAULT_KIT;
 
   const [form, setForm] = useState({
     code: kit.code,
