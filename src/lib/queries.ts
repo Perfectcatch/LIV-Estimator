@@ -79,6 +79,22 @@ export async function getCatalogItems() {
   return data ?? [];
 }
 
+// ── Single Catalog Item (SKU detail) ────────────────────────
+export async function getCatalogItemById(id: string) {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("catalog_items")
+    .select("*")
+    .eq("id", id)
+    .single();
+
+  if (error) {
+    console.error("[v0] getCatalogItemById error:", error.message);
+    return null;
+  }
+  return data;
+}
+
 // ── Clients ─────────────────────────────────────────────────
 export async function getClients() {
   const supabase = await createClient();
