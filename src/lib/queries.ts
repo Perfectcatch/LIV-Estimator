@@ -3,8 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 // ── Dashboard KPIs ──────────────────────────────────────────
 const emptyDashboard = {
   kpis: { pipelineValue: 0, activeJobCount: 0, customerCount: 0, openInvoiceTotal: 0, openInvoiceCount: 0 },
-  activeJobs: [] as Record<string, unknown>[],
-  recentActivity: [] as Record<string, unknown>[],
+  activeJobs: [] as never[],
+  recentActivity: [] as never[],
 };
 
 export async function getDashboardData() {
