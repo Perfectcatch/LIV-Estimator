@@ -1,4 +1,4 @@
-import type { BomLine, TakeoffResults } from "@/types/database";
+import type { BomLine, TakeoffResults } from "@/types/schema";
 import { resolveQuantity, calcExtCost, calcSellPrice, calculatePMFee } from "./formulas";
 
 export interface SkuRecord {

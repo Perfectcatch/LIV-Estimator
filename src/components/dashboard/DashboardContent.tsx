@@ -9,7 +9,7 @@ import {
   ResponsiveContainer, AreaChart, Area, Legend,
 } from "recharts";
 import { formatCurrency } from "@/lib/utils";
-import type { Jobs } from "@/types/database";
+import type { Jobs } from "@/types/schema";
 
 // ── Types ────────────────────────────────────────────────────
 interface DashboardKpis {

@@ -1,4 +1,4 @@
-import type { TakeoffInputs, TakeoffResults } from "@/types/database";
+import type { TakeoffInputs, TakeoffResults } from "@/types/schema";
 
 export function calculateTakeoff(inputs: TakeoffInputs): TakeoffResults {
   const {

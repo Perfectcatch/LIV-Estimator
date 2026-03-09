@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Plus, Search, Users, DollarSign, Briefcase, TrendingUp, Mail, Phone, MapPin, Eye } from "lucide-react";
-import type { Clients } from "@/types/database";
+import type { Clients } from "@/types/schema";
 
 interface ClientsListProps {
   clients: Clients[];
