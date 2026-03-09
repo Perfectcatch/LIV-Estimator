@@ -68,7 +68,7 @@ export async function getCatalogItems() {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("catalog_items")
-    .select("id, name, description, category, subcategory, unit, unit_cost, markup_percentage, cost_code, is_active, source_supplier, created_at")
+    .select("*")
     .order("name", { ascending: true })
     .limit(200);
 
@@ -84,7 +84,7 @@ export async function getClients() {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("clients")
-    .select("id, name, email, phone, company, address, notes, title, created_at")
+    .select("*")
     .order("name", { ascending: true })
     .limit(200);
 
