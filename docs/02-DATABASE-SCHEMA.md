@@ -44,15 +44,16 @@ SETTINGS
 
 ```prisma
 // prisma/schema.prisma
+// ⚠️  PRISMA 7: Database URL is in prisma.config.ts, NOT here.
+// ⚠️  See docs/01-ARCHITECTURE.md for prisma.config.ts setup.
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
+  provider = "postgresql"
+  // NO url or directUrl — Prisma 7 reads these from prisma.config.ts
 }
 
 // ════════════════════════════════════════════════════════════

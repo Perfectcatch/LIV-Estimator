@@ -1,8 +1,9 @@
 # LIV POOLS — CRM ESTIMATOR SYSTEM DIRECTORY
 
-> **Version:** 1.0.0  
-> **Stack:** Next.js 14 (App Router) · TypeScript · Prisma · PostgreSQL · Tailwind CSS · Vercel  
-> **Source of Truth:** LIV-Pools-Master-Estimator.xlsm (28-sheet workbook)
+> **Version:** 1.1.0  
+> **Stack:** Next.js 14 (App Router) · TypeScript · Prisma 7 · PostgreSQL (Supabase) · Tailwind CSS · Vercel  
+> **Source of Truth:** LIV-Pools-Master-Estimator.xlsm (28-sheet workbook)  
+> **Prisma 7 Note:** Database URLs live in `prisma.config.ts`, NOT in `schema.prisma`. See `01-ARCHITECTURE.md`.
 
 ---
 
