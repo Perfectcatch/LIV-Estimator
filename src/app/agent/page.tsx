@@ -33,14 +33,27 @@ export default function AgentPage() {
     { role: "ai", text: "OVERMIND is active. I have analyzed your 4 active jobs, 7 open estimates, and 43 client records. Ask me anything about your projects, estimates, or business patterns." },
   ]);
 
-  function sendMessage(text: string) {
-    if (!text.trim()) return;
-    setMessages((prev) => [
-      ...prev,
-      { role: "user", text },
-      { role: "ai", text: `Analyzing: "${text}" — I've reviewed your project data. This feature will connect to your live Supabase data once your database is populated. I can already see structural patterns in your estimate templates and job stages.` },
-    ]);
+  const [loading, setLoading] = useState(false);
+
+  async function sendMessage(text: string) {
+    if (!text.trim() || loading) return;
+    const userText = text.trim();
+    setMessages((prev) => [...prev, { role: "user", text: userText }]);
     setInput("");
+    setLoading(true);
+    try {
+      const res = await fetch("/api/claude", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: userText }),
+      });
+      const data = await res.json();
+      setMessages((prev) => [...prev, { role: "ai", text: data.ok ? data.text : `Error: ${data.error}` }]);
+    } catch (err) {
+      setMessages((prev) => [...prev, { role: "ai", text: `Network error: ${String(err)}` }]);
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -129,9 +142,10 @@ export default function AgentPage() {
           />
           <button
             onClick={() => sendMessage(input)}
-            className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white transition-colors"
+            disabled={loading}
+            className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <Send className="w-4 h-4" />
+            {loading ? <span className="text-xs">...</span> : <Send className="w-4 h-4" />}
           </button>
         </div>
       </div>
