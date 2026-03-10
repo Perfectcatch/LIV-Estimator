@@ -20,11 +20,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-[#1a1a2e]">
+    <div className="flex flex-col h-screen overflow-hidden" style={{ background: "#0d0d1a" }}>
       <TopNav onCommandPalette={() => setCmdOpen(true)} />
       <div className="flex flex-1 overflow-hidden">
         <Sidebar />
-        <main className="flex-1 overflow-y-auto bg-[#1a1a2e]">
+        <main className="flex-1 overflow-y-auto" style={{ background: "#0d0d1a" }}>
           {children}
         </main>
       </div>
